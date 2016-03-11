@@ -59,11 +59,6 @@ class TestAsync(unittest.TestCase):
     def setUp(self):
         global ATTEMPT_N
         ATTEMPT_N = 1
-        self.sleep_patcher = mock.patch('asyncio.sleep')
-        self.sleep_patcher.start()
-
-    def tearDown(self):
-        self.sleep_patcher.stop()
 
     def run_retry(self, function, args=None, kwargs=None, **retry_kwargs):
         loop = asyncio.get_event_loop()
@@ -73,6 +68,8 @@ class TestAsync(unittest.TestCase):
             retry(function, args=args, kwargs=kwargs.copy(), **retry_kwargs)
         )
         loop.run_until_complete(asyncio.wait([f]))
+        if f.exception():
+            raise f.exception()
         return f
 
     def testRetrySucceed(self):
@@ -80,7 +77,7 @@ class TestAsync(unittest.TestCase):
         self.run_retry(_succeedOnSecondAttempt, attempts=2, sleeptime=0, jitter=0)
 
     def testRetryFailWithoutCatching(self):
-        self.assertRaises(Exception, self.retry, _alwaysFail, sleeptime=0, jitter=0,
+        self.assertRaises(Exception, self.run_retry, _alwaysFail, sleeptime=0, jitter=0,
                           exceptions=())
 
     def testRetryFailEnsureRaisesLastException(self):
@@ -150,7 +147,7 @@ class TestAsync(unittest.TestCase):
             )
 
     def test_jitter_bounds(self):
-        self.assertRaises(Exception, calculate_sleep_time(1, sleeptime=1, jitter=2))
+        self.assertRaises(Exception, calculate_sleep_time, 1, sleeptime=1, jitter=2)
 
     def test_sleeptime_jitter(self):
         # Test that jitter works
