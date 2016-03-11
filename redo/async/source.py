@@ -88,6 +88,7 @@ def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5, jitter=
             asyncio.sleep(sleeptime_real)
 
 
+@asyncio.coroutine
 def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
           sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
           cleanup=None, args=(), kwargs={}):
