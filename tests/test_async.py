@@ -9,7 +9,7 @@ import mock
 import unittest
 import time
 
-from redo.async import retry, retriable, retrying, retrier
+from redo.async import retry, retriable, retrying, calculate_sleep_time
 
 ATTEMPT_N = 1
 
@@ -186,55 +186,48 @@ class TestAsync(unittest.TestCase):
             mocked_retry.assert_called_once_with(
                 wrapped, 1, x='y', args=('a',), kwargs={'c': 'a', 'b': 1})
 
-    def test_retrier(self):
-        """Make sure retrier behaves properly"""
-        n = 0
-        for _ in retrier(attempts=5, sleeptime=0, jitter=0):
-            n += 1
-        self.assertEquals(n, 5)
-
-    def test_retrier_sleep(self):
+    def test_sleeptime(self):
         """Make sure retrier sleep is behaving"""
-        with mock.patch("asyncio.sleep") as sleep:
-            # Test that normal sleep scaling works
-            for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=2, jitter=0):
-                pass
-            expected = [mock.call(x) for x in (10, 20, 40, 80)]
-            self.assertEquals(sleep.call_args_list, expected)
+        expected = [None, 10, 20, 40, 80]
+        for attempt in range(1, 6):
+            self.assertEqual(
+                expected[attempt],
+                calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300,
+                                     sleepscale=2, jitter=0)
+            )
 
-    def test_retrier_sleep_no_jitter(self):
+    def test_sleeptime_no_jitter(self):
         """Make sure retrier sleep is behaving"""
-        with mock.patch("asyncio.sleep") as sleep:
-            # Test that normal sleep scaling works without a jitter
-            for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=2, jitter=None):
-                pass
-            expected = [mock.call(x) for x in (10, 20, 40, 80)]
-            self.assertEquals(sleep.call_args_list, expected)
+        expected = [None, 10, 20, 40, 80]
+        for attempt in range(1, 6):
+            self.assertEqual(
+                expected[attempt],
+                calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300,
+                                     sleepscale=2, jitter=None)
+            )
 
-    def test_retrier_maxsleep(self):
-        with mock.patch("asyncio.sleep") as sleep:
-            # Test that max sleep time works
-            for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=30, sleepscale=2, jitter=0):
-                pass
-            expected = [mock.call(x) for x in (10, 20, 30, 30)]
-            self.assertEquals(sleep.call_args_list, expected)
+    def test_sleeptime_maxsleep(self):
+        expected = [None, 10, 20, 30, 30]
+        for attempt in range(1, 6):
+            self.assertEqual(
+                expected[attempt],
+                calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=30,
+                                     sleepscale=2, jitter=0)
+            )
 
     def test_jitter_bounds(self):
-        self.assertRaises(Exception, retrier(sleeptime=1, jitter=2))
+        self.assertRaises(Exception, calculate_sleep_time(sleeptime=1, jitter=2))
 
-    def test_retrier_jitter(self):
-        with mock.patch("asyncio.sleep") as sleep:
-            # Test that jitter works
-            with mock.patch("random.randint") as randint:
-                randint.return_value = 3
-                for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=300,
-                                 sleepscale=2, jitter=3):
-                    randint.return_value *= -1
-                expected = [mock.call(x) for x in (7, 23, 37, 83)]
-                self.assertEquals(sleep.call_args_list, expected)
-                self.assertEquals(randint.call_args, mock.call(-48, 48))
-
-    def test_retrier_yields(self):
-        """Ensure that retrier yields the sleep time"""
-        for real_sleeptime in retrier(attempts=3, sleeptime=1, sleepscale=1, jitter=0):
-            self.assertEquals(real_sleeptime, 1)
+    def test_sleeptime_jitter(self):
+        # Test that jitter works
+        with mock.patch("random.randint") as randint:
+            randint.return_value = 3
+            expected = [None, 7, 23, 37, 83]
+            for attempt in range(1, 6):
+                self.assertEqual(
+                    expected[attempt],
+                    calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300,
+                                         sleepscale=2, jitter=3)
+                )
+                randint.return_value *= -1
+            self.assertEquals(randint.call_args, mock.call(-48, 48))

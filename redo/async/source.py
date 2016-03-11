@@ -112,6 +112,7 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
         up until the last attempt, in which case they are re-raised.
 
     Example:
+        >>> import asyncio
         >>> count = 0
         >>> def foo():
         ...     global count
@@ -120,7 +121,8 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
         ...     if count < 3:
         ...         raise ValueError("count is too small!")
         ...     return "success!"
-        >>> retry(foo, sleeptime=0, jitter=0)
+        >>> loop = asyncio.get_event_loop()
+        >>> loop.run_until_complete(retry(foo, sleeptime=0, jitter=0))
         1
         2
         3
@@ -148,14 +150,14 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
 #                     max_sleeptime=max_sleeptime, sleepscale=sleepscale,
 #                     jitter=jitter):
         log.debug("attempt %i/%i", index, attempts)
-        print("attempt %i/%i" % (index, attempts))
+        #print("attempt %i/%i" % (index, attempts))
         try:
             logfn = log.info if index != 1 else log.debug
             logfn(log_attempt_format, index)
             return action(*args, **kwargs)
         except retry_exceptions as exc:
             log.debug("retry: Caught exception: ", exc_info=True)
-            print("retry: Caught exception: " + str(exc))
+            #print("retry: Caught exception: " + str(exc))
             if cleanup:
                 cleanup()
             if index == attempts:
@@ -168,7 +170,7 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
                 sleepscale=sleepscale,
                 jitter=jitter
             )
-            print("retry: sleeping {}...".format(length))
+            #print("retry: sleeping {}...".format(length))
             await asyncio.sleep(length)
         finally:
             index += 1
