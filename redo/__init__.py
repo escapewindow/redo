@@ -57,6 +57,8 @@ def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5, jitter=
         ...     print("max tries hit")
         max tries hit
     """
+    if jitter is None:
+        jitter = 0
     if jitter > sleeptime:
         # To prevent negative sleep times
         raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
