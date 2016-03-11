@@ -65,52 +65,58 @@ class TestAsync(unittest.TestCase):
     def tearDown(self):
         self.sleep_patcher.stop()
 
+    def run_retry(self, function, args=None, kwargs=None, **retry_kwargs):
+        loop = asyncio.get_event_loop()
+        args = args or ()
+        kwargs = kwargs or {}
+        f = asyncio.ensure_future(
+            retry(function, args=args, kwargs=kwargs.copy(), **retry_kwargs)
+        )
+        loop.run_until_complete(asyncio.wait([f]))
+        return f
+
     def testRetrySucceed(self):
         # Will raise if anything goes wrong
-        retry(_succeedOnSecondAttempt, attempts=2, sleeptime=0, jitter=0)
+        self.run_retry(_succeedOnSecondAttempt, attempts=2, sleeptime=0, jitter=0)
 
     def testRetryFailWithoutCatching(self):
-        self.assertRaises(Exception, retry, _alwaysFail, sleeptime=0, jitter=0,
+        self.assertRaises(Exception, self.retry, _alwaysFail, sleeptime=0, jitter=0,
                           exceptions=())
 
     def testRetryFailEnsureRaisesLastException(self):
-        self.assertRaises(Exception, retry, _alwaysFail, sleeptime=0, jitter=0)
+        self.assertRaises(Exception, self.run_retry, _alwaysFail, sleeptime=0, jitter=0)
 
     def testRetrySelectiveExceptionSucceed(self):
-        retry(_raiseCustomException, attempts=2, sleeptime=0, jitter=0,
+        self.run_retry(_raiseCustomException, attempts=2, sleeptime=0, jitter=0,
               retry_exceptions=(NewError,))
 
     def testRetrySelectiveExceptionFail(self):
-        self.assertRaises(NewError, retry, _raiseCustomException, attempts=2,
+        self.assertRaises(NewError, self.run_retry, _raiseCustomException, attempts=2,
                           sleeptime=0, jitter=0, retry_exceptions=(OtherError,))
 
     def testRetryWithSleep(self):
-        retry(_succeedOnSecondAttempt, attempts=2, sleeptime=1)
+        self.run_retry(_succeedOnSecondAttempt, attempts=2, sleeptime=1)
 
     def testRetryOnlyRunOnce(self):
         """Tests that retry() doesn't call the action again after success"""
         global ATTEMPT_N
-        retry(_alwaysPass, attempts=3, sleeptime=0, jitter=0)
+        self.run_retry(_alwaysPass, attempts=3, sleeptime=0, jitter=0)
         # ATTEMPT_N gets increased regardless of pass/fail
         self.assertEquals(2, ATTEMPT_N)
 
     def testRetryReturns(self):
-        loop = asyncio.get_event_loop()
-        ret = loop.run_until_complete(retry(_alwaysPass, sleeptime=0, jitter=0))
-        loop.close()
-        self.assertEquals(ret, True)
+        f = self.run_retry(_alwaysPass, sleeptime=0, jitter=0)
+        self.assertEquals(f.result(), True)
 
     def testRetryCleanupIsCalled(self):
         cleanup = mock.Mock()
-        retry(_succeedOnSecondAttempt, cleanup=cleanup, sleeptime=0, jitter=0)
+        self.run_retry(_succeedOnSecondAttempt, cleanup=cleanup, sleeptime=0, jitter=0)
         self.assertEquals(cleanup.call_count, 1)
 
     def testRetryArgsPassed(self):
         args = (1, 'two', 3)
         kwargs = dict(foo='a', bar=7)
-        loop = asyncio.get_event_loop()
-        f = asyncio.ensure_future(retry(_mirrorArgs, args=args, kwargs=kwargs.copy(), sleeptime=0, jitter=0))
-        loop.run_until_complete(asyncio.wait([f]))
+        f = self.run_retry(_mirrorArgs, args=args, kwargs=kwargs.copy(), sleeptime=0, jitter=0)
         self.assertEqual(f.result()[0], args)
         self.assertEqual(f.result()[1], kwargs)
 
