@@ -128,7 +128,9 @@ class TestAsync(unittest.TestCase):
         self.assertEquals(2, ATTEMPT_N)
 
     def testRetryReturns(self):
-        ret = retry(_alwaysPass, sleeptime=0, jitter=0)
+        loop = asyncio.get_event_loop()
+        ret = loop.run_until_complete(retry(_alwaysPass, sleeptime=0, jitter=0))
+        loop.close()
         self.assertEquals(ret, True)
 
     def testRetriableReturns(self):

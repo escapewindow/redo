@@ -13,8 +13,8 @@ import random
 log = logging.getLogger(__name__)
 
 
-@asyncio.coroutine
-def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5, jitter=1):
+def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5,
+            jitter=1):
     """
     A generator function that sleeps between retries, handles exponential
     backoff and jitter. The action you are retrying is meant to run after
@@ -58,15 +58,16 @@ def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5, jitter=
         ...     print("max tries hit")
         max tries hit
     """
-    if jitter is None:
-        jitter = 0
+    jitter = jitter or 0
     if jitter > sleeptime:
         # To prevent negative sleep times
         raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
 
     sleeptime_real = sleeptime
-    for _ in range(attempts):
-        log.debug("attempt %i/%i", _ + 1, attempts)
+    index = 0
+    while index < attempts:
+        index += 1
+        log.debug("attempt %i/%i", index, attempts)
 
         yield sleeptime_real
 
@@ -83,12 +84,11 @@ def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5, jitter=
             sleeptime_real = max_sleeptime
 
         # Don't need to sleep the last time
-        if _ < attempts - 1:
-            log.debug("sleeping for %.2fs (attempt %i/%i)", sleeptime_real, _ + 1, attempts)
-            asyncio.sleep(sleeptime_real)
+        if index < attempts:
+            log.debug("sleeping for %.2fs (attempt %i/%i)", sleeptime_real, index, attempts)
+            yield from asyncio.sleep(sleeptime_real)
 
 
-@asyncio.coroutine
 def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
           sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
           cleanup=None, args=(), kwargs={}):
