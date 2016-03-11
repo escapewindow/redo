@@ -13,8 +13,8 @@ import random
 log = logging.getLogger(__name__)
 
 
-def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5,
-            jitter=1):
+def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.5,
+                         jitter=1):
     """
     A generator function that sleeps between retries, handles exponential
     backoff and jitter. The action you are retrying is meant to run after
@@ -62,36 +62,24 @@ def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5,
     if jitter > sleeptime:
         # To prevent negative sleep times
         raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
+    if jitter:
+        sleeptime_real = sleeptime + random.randint(-jitter, jitter)
+        # our jitter should scale along with the sleeptime
+        jitter = int(jitter * sleepscale)
+    else:
+        sleeptime_real = sleeptime
 
-    sleeptime_real = sleeptime
-    index = 0
-    while index < attempts:
-        index += 1
-        log.debug("attempt %i/%i", index, attempts)
+    sleeptime_real *= sleepscale
 
-        yield sleeptime_real
+    if sleeptime_real > max_sleeptime:
+        sleeptime_real = max_sleeptime
 
-        if jitter:
-            sleeptime_real = sleeptime + random.randint(-jitter, jitter)
-            # our jitter should scale along with the sleeptime
-            jitter = int(jitter * sleepscale)
-        else:
-            sleeptime_real = sleeptime
-
-        sleeptime *= sleepscale
-
-        if sleeptime_real > max_sleeptime:
-            sleeptime_real = max_sleeptime
-
-        # Don't need to sleep the last time
-        if index < attempts:
-            log.debug("sleeping for %.2fs (attempt %i/%i)", sleeptime_real, index, attempts)
-            yield from asyncio.sleep(sleeptime_real)
+    return sleeptime_real
 
 
-def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
-          sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
-          cleanup=None, args=(), kwargs={}):
+async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
+                sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
+                cleanup=None, args=(), kwargs={}):
     """
     Calls an action function until it succeeds, or we give up.
 
@@ -156,24 +144,34 @@ def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
         log.debug("max_sleeptime %d less than sleeptime %d" % (
             max_sleeptime, sleeptime))
 
-    n = 1
-    for _ in retrier(attempts=attempts, sleeptime=sleeptime,
-                     max_sleeptime=max_sleeptime, sleepscale=sleepscale,
-                     jitter=jitter):
+    index = 1
+    while index < attempts:
+#    for _ in retrier(attempts=attempts, sleeptime=sleeptime,
+#                     max_sleeptime=max_sleeptime, sleepscale=sleepscale,
+#                     jitter=jitter):
+        log.debug("attempt %i/%i", index, attempts)
         try:
             logfn = log.info if n != 1 else log.debug
             logfn(log_attempt_format, n)
-            yield from action(*args, **kwargs)
+            await action(*args, **kwargs)
         except retry_exceptions:
             log.debug("retry: Caught exception: ", exc_info=True)
             if cleanup:
                 cleanup()
-            if n == attempts:
+            if index == attempts:
                 log.info("retry: Giving up on %s" % action_name)
                 raise
-            continue
+            await asyncio.sleep(
+                calculate_sleep_time(
+                    index,
+                    sleeptime=sleeptime,
+                    max_sleeptime=max_sleeptime,
+                    sleepscale=sleepscale,
+                    jitter=jitter
+                )
+            )
         finally:
-            n += 1
+            index += 1
 
 
 def retriable(*retry_args, **retry_kwargs):
@@ -198,7 +196,8 @@ def retriable(*retry_args, **retry_kwargs):
         ...     if count < 3:
         ...         raise ValueError("count too small")
         ...     return "success!"
-        >>> foo()
+        >>> for i in foo:
+        ...     print(i)
         1
         2
         3
