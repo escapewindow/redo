@@ -16,15 +16,10 @@ log = logging.getLogger(__name__)
 def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.5,
                          jitter=1):
     """
-    A generator function that sleeps between retries, handles exponential
-    backoff and jitter. The action you are retrying is meant to run after
-    retrier yields.
-
-    At each iteration, we sleep for sleeptime + random.randint(-jitter, jitter).
-    Afterwards sleeptime is multiplied by sleepscale for the next iteration.
+    A function that calculates exponential backoff and jitter.
 
     Args:
-        attempts (int): maximum number of times to try; defaults to 5
+        attempt (int): the current attempt number, starting from 1.
         sleeptime (float): how many seconds to sleep between tries; defaults to
                            60s (one minute)
         max_sleeptime (float): the longest we'll sleep, in seconds; defaults to
@@ -35,28 +30,8 @@ def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.
                       the amount is chosen at random between [-jitter, +jitter]
                       defaults to 1
 
-    Yields:
-        None, a maximum of `attempts` number of times
-
-    Example:
-        >>> n = 0
-        >>> for _ in retrier(sleeptime=0, jitter=0):
-        ...     if n == 3:
-        ...         # We did the thing!
-        ...         break
-        ...     n += 1
-        >>> n
-        3
-
-        >>> n = 0
-        >>> for _ in retrier(sleeptime=0, jitter=0):
-        ...     if n == 6:
-        ...         # We did the thing!
-        ...         break
-        ...     n += 1
-        ... else:
-        ...     print("max tries hit")
-        max tries hit
+    Returns:
+        sleeptime (float): the lenght of time to sleep
     """
     if jitter:
         if jitter > sleeptime:
@@ -67,7 +42,10 @@ def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.
     else:
         sleeptime = sleeptime
 
-    sleeptime = float(sleeptime * attempt * sleepscale)
+    if attempt > 1:
+        exp = attempt - 1
+        multiplier = sleepscale ** exp
+        sleeptime = int(sleeptime * multiplier)
 
     if sleeptime > max_sleeptime:
         sleeptime = max_sleeptime

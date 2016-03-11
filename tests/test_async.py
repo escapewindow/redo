@@ -180,7 +180,7 @@ class TestAsync(unittest.TestCase):
         """Make sure to distribute retry and function args/kwargs properly"""
         def wrapped(*args, **kwargs):
             pass
-        with mock.patch("redo.async.retry") as mocked_retry:
+        with mock.patch("redo.async.source.retry") as mocked_retry:
             with retrying(wrapped, 1, x="y") as w:
                 w("a", b=1, c="a")
             mocked_retry.assert_called_once_with(
@@ -189,7 +189,7 @@ class TestAsync(unittest.TestCase):
     def test_sleeptime(self):
         """Make sure retrier sleep is behaving"""
         expected = [None, 10, 20, 40, 80]
-        for attempt in range(1, 6):
+        for attempt in range(1, 5):
             self.assertEqual(
                 expected[attempt],
                 calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300,
@@ -199,7 +199,7 @@ class TestAsync(unittest.TestCase):
     def test_sleeptime_no_jitter(self):
         """Make sure retrier sleep is behaving"""
         expected = [None, 10, 20, 40, 80]
-        for attempt in range(1, 6):
+        for attempt in range(1, 5):
             self.assertEqual(
                 expected[attempt],
                 calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300,
@@ -208,7 +208,7 @@ class TestAsync(unittest.TestCase):
 
     def test_sleeptime_maxsleep(self):
         expected = [None, 10, 20, 30, 30]
-        for attempt in range(1, 6):
+        for attempt in range(1, 5):
             self.assertEqual(
                 expected[attempt],
                 calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=30,
@@ -216,14 +216,14 @@ class TestAsync(unittest.TestCase):
             )
 
     def test_jitter_bounds(self):
-        self.assertRaises(Exception, calculate_sleep_time(sleeptime=1, jitter=2))
+        self.assertRaises(Exception, calculate_sleep_time(1, sleeptime=1, jitter=2))
 
     def test_sleeptime_jitter(self):
         # Test that jitter works
         with mock.patch("random.randint") as randint:
             randint.return_value = 3
             expected = [None, 7, 23, 37, 83]
-            for attempt in range(1, 6):
+            for attempt in range(1, 5):
                 self.assertEqual(
                     expected[attempt],
                     calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300,
