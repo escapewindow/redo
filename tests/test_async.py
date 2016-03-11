@@ -8,7 +8,7 @@ import asyncio
 import mock
 import unittest
 
-from redo import retry, retriable, retrying, retrier
+from redo.async import retry, retriable, retrying, retrier
 
 ATTEMPT_N = 1
 
