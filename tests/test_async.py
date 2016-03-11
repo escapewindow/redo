@@ -69,6 +69,7 @@ class TestAsync(unittest.TestCase):
         )
         loop.run_until_complete(asyncio.wait([f]))
         if f.exception():
+            print(f.exception())
             raise f.exception()
         return f
 
@@ -81,7 +82,14 @@ class TestAsync(unittest.TestCase):
                           exceptions=())
 
     def testRetryFailEnsureRaisesLastException(self):
-        self.assertRaises(Exception, self.run_retry, _alwaysFail, sleeptime=0, jitter=0)
+        #self.assertRaises(Exception, self.run_retry, _alwaysFail, sleeptime=0, jitter=0)
+        f = self.run_retry(_alwaysFail, sleeptime=0, jitter=0)
+        print(dir(f))
+        print(f.result())
+        print(f.done())
+        print(f.exception())
+        self.assertTrue(False)
+
 
     def testRetrySelectiveExceptionSucceed(self):
         self.run_retry(_raiseCustomException, attempts=2, sleeptime=0, jitter=0,

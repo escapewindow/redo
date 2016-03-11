@@ -11,6 +11,10 @@ import random
 log = logging.getLogger(__name__)
 
 
+class RetryException(Exception):
+    pass
+
+
 def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.5,
                          jitter=1):
     """
@@ -52,96 +56,100 @@ def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.
     return sleeptime
 
 
-async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
+
+class Retry(asyncio.Future):
+    def __init__(self, action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
                 sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
                 cleanup=None, args=(), kwargs={}):
-    """
-    Calls an action function until it succeeds, or we give up.
+        """
+        Calls an action function until it succeeds, or we give up.
 
-    Args:
-        action (callable): the function to retry
-        attempts (int): maximum number of times to try; defaults to 5
-        sleeptime (float): how many seconds to sleep between tries; defaults to
-                           60s (one minute)
-        max_sleeptime (float): the longest we'll sleep, in seconds; defaults to
-                               300s (five minutes)
-        sleepscale (float): how much to multiply the sleep time by each
-                            iteration; defaults to 1.5
-        jitter (int): random jitter to introduce to sleep time each iteration.
-                      the amount is chosen at random between [-jitter, +jitter]
-                      defaults to 1
-        retry_exceptions (tuple): tuple of exceptions to be caught. If other
-                                  exceptions are raised by action(), then these
-                                  are immediately re-raised to the caller.
-        cleanup (callable): optional; called if one of `retry_exceptions` is
-                            caught. No arguments are passed to the cleanup
-                            function; if your cleanup requires arguments,
-                            consider using functools.partial or a lambda
-                            function.
-        args (tuple): positional arguments to call `action` with
-        hwargs (dict): keyword arguments to call `action` with
+        Args:
+            action (callable): the function to retry
+            attempts (int): maximum number of times to try; defaults to 5
+            sleeptime (float): how many seconds to sleep between tries; defaults to
+                               60s (one minute)
+            max_sleeptime (float): the longest we'll sleep, in seconds; defaults to
+                                   300s (five minutes)
+            sleepscale (float): how much to multiply the sleep time by each
+                                iteration; defaults to 1.5
+            jitter (int): random jitter to introduce to sleep time each iteration.
+                          the amount is chosen at random between [-jitter, +jitter]
+                          defaults to 1
+            retry_exceptions (tuple): tuple of exceptions to be caught. If other
+                                      exceptions are raised by action(), then these
+                                      are immediately re-raised to the caller.
+            cleanup (callable): optional; called if one of `retry_exceptions` is
+                                caught. No arguments are passed to the cleanup
+                                function; if your cleanup requires arguments,
+                                consider using functools.partial or a lambda
+                                function.
+            args (tuple): positional arguments to call `action` with
+            hwargs (dict): keyword arguments to call `action` with
 
-    Returns:
-        Whatever action(*args, **kwargs) returns
+        Returns:
+            Whatever action(*args, **kwargs) returns
 
-    Raises:
-        Whatever action(*args, **kwargs) raises. `retry_exceptions` are caught
-        up until the last attempt, in which case they are re-raised.
+        Raises:
+            Whatever action(*args, **kwargs) raises. `retry_exceptions` are caught
+            up until the last attempt, in which case they are re-raised.
 
-    Example:
-        >>> import asyncio
-        >>> count = 0
-        >>> def foo():
-        ...     global count
-        ...     count += 1
-        ...     print(count)
-        ...     if count < 3:
-        ...         raise ValueError("count is too small!")
-        ...     return "success!"
-        >>> loop = asyncio.get_event_loop()
-        >>> loop.run_until_complete(retry(foo, sleeptime=0, jitter=0))
-        1
-        2
-        3
-        'success!'
-    """
-    assert callable(action)
-    assert not cleanup or callable(cleanup)
+        Example:
+            >>> import asyncio
+            >>> count = 0
+            >>> def foo():
+            ...     global count
+            ...     count += 1
+            ...     print(count)
+            ...     if count < 3:
+            ...         raise ValueError("count is too small!")
+            ...     return "success!"
+            >>> loop = asyncio.get_event_loop()
+            >>> loop.run_until_complete(retry(foo, sleeptime=0, jitter=0))
+            1
+            2
+            3
+            'success!'
+        """
 
-    action_name = getattr(action, '__name__', action)
-    if args or kwargs:
-        log_attempt_format = ("retry: calling %s with args: %s,"
-                              " kwargs: %s, attempt #%%d"
-                              % (action_name, args, kwargs))
-    else:
-        log_attempt_format = ("retry: calling %s, attempt #%%d"
-                              % action_name)
+    async def run(self):
+        assert callable(action)
+        assert not cleanup or callable(cleanup)
 
-    if max_sleeptime < sleeptime:
-        log.debug("max_sleeptime %d less than sleeptime %d" % (
-            max_sleeptime, sleeptime))
+        action_name = getattr(action, '__name__', action)
+        if args or kwargs:
+            log_attempt_format = ("retry: calling %s with args: %s,"
+                                  " kwargs: %s, attempt #%%d"
+                                  % (action_name, args, kwargs))
+        else:
+            log_attempt_format = ("retry: calling %s, attempt #%%d"
+                                  % action_name)
 
-    index = 1
-    while index < attempts:
-        log.debug("attempt %i/%i", index, attempts)
-        try:
-            logfn = log.info if index != 1 else log.debug
-            logfn(log_attempt_format, index)
-            return action(*args, **kwargs)
-        except retry_exceptions:
-            log.debug("retry: Caught exception: ", exc_info=True)
-            if cleanup:
-                cleanup()
-            if index == attempts:
-                log.info("retry: Giving up on %s" % action_name)
-                raise
-            length = calculate_sleep_time(
-                index,
-                sleeptime=sleeptime,
-                max_sleeptime=max_sleeptime,
-                sleepscale=sleepscale,
-                jitter=jitter
-            )
-            await asyncio.sleep(length)
-        finally:
-            index += 1
+        if max_sleeptime < sleeptime:
+            log.debug("max_sleeptime %d less than sleeptime %d" % (
+                max_sleeptime, sleeptime))
+
+        index = 1
+        while index < attempts:
+            log.debug("attempt %i/%i", index, attempts)
+            try:
+                logfn = log.info if index != 1 else log.debug
+                logfn(log_attempt_format, index)
+                self.set_result(action(*args, **kwargs))
+            except retry_exceptions as exc:
+                log.debug("retry: Caught exception: ", exc_info=True)
+                if cleanup:
+                    cleanup()
+                if index >= attempts:
+                    log.info("retry: Giving up on %s" % action_name)
+                    self.set_exception(exc)
+                length = calculate_sleep_time(
+                    index,
+                    sleeptime=sleeptime,
+                    max_sleeptime=max_sleeptime,
+                    sleepscale=sleepscale,
+                    jitter=jitter
+                )
+                await asyncio.sleep(length)
+            finally:
+                index += 1
