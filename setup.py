@@ -3,6 +3,9 @@ try:
 except ImportError:
     from distutils.core import setup
 
+install_requires = []
+if sys.version_info >= (3, 4):
+    install_requires.append('aiowrap')
 
 setup(
     name="redo",
@@ -11,6 +14,7 @@ setup(
     author="Ben Hearsum",
     author_email="ben@hearsum.ca",
     packages=["redo"],
+    install_requires=install_requires,
     entry_points={
         "console_scripts": ["retry = redo.cmd:main"],
     },
