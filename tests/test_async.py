@@ -9,6 +9,7 @@ import mock
 import unittest
 
 from redo.async import retry, retriable, retrying, retrier
+from redo.async import time.sleep as async_sleep
 
 ATTEMPT_N = 1
 
@@ -58,7 +59,7 @@ class TestAsync(unittest.TestCase):
     def setUp(self):
         global ATTEMPT_N
         ATTEMPT_N = 1
-        self.sleep_patcher = mock.patch('asyncio.sleep')
+        self.sleep_patcher = mock.patch('async_sleep')
         self.sleep_patcher.start()
 
     def tearDown(self):
@@ -192,7 +193,7 @@ class TestAsync(unittest.TestCase):
 
     def test_retrier_sleep(self):
         """Make sure retrier sleep is behaving"""
-        with mock.patch("asyncio.sleep") as sleep:
+        with mock.patch("async_sleep") as sleep:
             # Test that normal sleep scaling works
             for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=2, jitter=0):
                 pass
@@ -201,7 +202,7 @@ class TestAsync(unittest.TestCase):
 
     def test_retrier_sleep_no_jitter(self):
         """Make sure retrier sleep is behaving"""
-        with mock.patch("asyncio.sleep") as sleep:
+        with mock.patch("async_leep") as sleep:
             # Test that normal sleep scaling works without a jitter
             for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=2, jitter=None):
                 pass
@@ -209,7 +210,7 @@ class TestAsync(unittest.TestCase):
             self.assertEquals(sleep.call_args_list, expected)
 
     def test_retrier_maxsleep(self):
-        with mock.patch("asyncio.sleep") as sleep:
+        with mock.patch("async_sleep") as sleep:
             # Test that max sleep time works
             for _ in retrier(attempts=5, sleeptime=10, max_sleeptime=30, sleepscale=2, jitter=0):
                 pass
@@ -220,7 +221,7 @@ class TestAsync(unittest.TestCase):
         self.assertRaises(Exception, retrier(sleeptime=1, jitter=2))
 
     def test_retrier_jitter(self):
-        with mock.patch("asyncio.sleep") as sleep:
+        with mock.patch("async_sleep") as sleep:
             # Test that jitter works
             with mock.patch("random.randint") as randint:
                 randint.return_value = 3

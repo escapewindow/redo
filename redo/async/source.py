@@ -5,7 +5,19 @@
 # ***** END LICENSE BLOCK *****
 from __future__ import absolute_import, division, print_function
 
+import aiowrap
 import asyncio
+import time
+
+import redo
+
+
+time.sleep = aiowrap.wrap_async(asyncio.sleep)
+retrier = aiowrap.wrap_sync(redo.retrier)
+# retry = aiowrap.wrap_sync(redo.retry)
+
+__all__ = ['retrier']
+
 from functools import wraps
 from contextlib import contextmanager
 import logging
@@ -13,82 +25,6 @@ import random
 log = logging.getLogger(__name__)
 
 
-@asyncio.coroutine
-def retrier(attempts=5, sleeptime=10, max_sleeptime=300, sleepscale=1.5, jitter=1):
-    """
-    A generator function that sleeps between retries, handles exponential
-    backoff and jitter. The action you are retrying is meant to run after
-    retrier yields.
-
-    At each iteration, we sleep for sleeptime + random.randint(-jitter, jitter).
-    Afterwards sleeptime is multiplied by sleepscale for the next iteration.
-
-    Args:
-        attempts (int): maximum number of times to try; defaults to 5
-        sleeptime (float): how many seconds to sleep between tries; defaults to
-                           60s (one minute)
-        max_sleeptime (float): the longest we'll sleep, in seconds; defaults to
-                               300s (five minutes)
-        sleepscale (float): how much to multiply the sleep time by each
-                            iteration; defaults to 1.5
-        jitter (int): random jitter to introduce to sleep time each iteration.
-                      the amount is chosen at random between [-jitter, +jitter]
-                      defaults to 1
-
-    Yields:
-        None, a maximum of `attempts` number of times
-
-    Example:
-        >>> n = 0
-        >>> for _ in retrier(sleeptime=0, jitter=0):
-        ...     if n == 3:
-        ...         # We did the thing!
-        ...         break
-        ...     n += 1
-        >>> n
-        3
-
-        >>> n = 0
-        >>> for _ in retrier(sleeptime=0, jitter=0):
-        ...     if n == 6:
-        ...         # We did the thing!
-        ...         break
-        ...     n += 1
-        ... else:
-        ...     print("max tries hit")
-        max tries hit
-    """
-    if jitter is None:
-        jitter = 0
-    if jitter > sleeptime:
-        # To prevent negative sleep times
-        raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
-
-    sleeptime_real = sleeptime
-    for _ in range(attempts):
-        log.debug("attempt %i/%i", _ + 1, attempts)
-
-        yield sleeptime_real
-
-        if jitter:
-            sleeptime_real = sleeptime + random.randint(-jitter, jitter)
-            # our jitter should scale along with the sleeptime
-            jitter = int(jitter * sleepscale)
-        else:
-            sleeptime_real = sleeptime
-
-        sleeptime *= sleepscale
-
-        if sleeptime_real > max_sleeptime:
-            sleeptime_real = max_sleeptime
-
-        # Don't need to sleep the last time
-        if _ < attempts - 1:
-            log.debug("sleeping for %.2fs (attempt %i/%i)", sleeptime_real, _ + 1, attempts)
-            asyncio.sleep(sleeptime_real)
-
-
-@asyncio.coroutine
 def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
           sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
           cleanup=None, args=(), kwargs={}):
@@ -118,7 +54,7 @@ def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
         args (tuple): positional arguments to call `action` with
         hwargs (dict): keyword arguments to call `action` with
 
-    Yields:
+    Returns:
         Whatever action(*args, **kwargs) returns
 
     Raises:
@@ -163,7 +99,7 @@ def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
         try:
             logfn = log.info if n != 1 else log.debug
             logfn(log_attempt_format, n)
-            yield from action(*args, **kwargs)
+            return action(*args, **kwargs)
         except retry_exceptions:
             log.debug("retry: Caught exception: ", exc_info=True)
             if cleanup:
@@ -205,11 +141,10 @@ def retriable(*retry_args, **retry_kwargs):
         'success!'
     """
     def _retriable_factory(func):
-        @asyncio.coroutine
         @wraps(func)
         def _retriable_wrapper(*args, **kwargs):
-            yield from retry(func, args=args, kwargs=kwargs, *retry_args,
-                             **retry_kwargs)
+            return retry(func, args=args, kwargs=kwargs, *retry_args,
+                         **retry_kwargs)
         return _retriable_wrapper
     return _retriable_factory
 
