@@ -9,7 +9,7 @@ import mock
 import unittest
 import time
 
-from redo.async import retry, calculate_sleep_time
+from redo.async import Retry, calculate_sleep_time
 
 ATTEMPT_N = 1
 
@@ -64,10 +64,8 @@ class TestAsync(unittest.TestCase):
         loop = asyncio.get_event_loop()
         args = args or ()
         kwargs = kwargs or {}
-        f = asyncio.ensure_future(
-            retry(function, args=args, kwargs=kwargs.copy(), **retry_kwargs)
-        )
-        loop.run_until_complete(asyncio.wait([f]))
+        f = Retry(function, args=args, kwargs=kwargs.copy(), **retry_kwargs)
+        f._loop.run_until_complete(asyncio.wait([f]))
         if f.exception():
             print(f.exception())
             raise f.exception()

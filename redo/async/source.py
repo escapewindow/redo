@@ -112,43 +112,61 @@ class Retry(asyncio.Future):
             'success!'
         """
 
-    async def run(self):
-        assert callable(action)
-        assert not cleanup or callable(cleanup)
+    def __init__(self, action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
+                sleepscale=1.5, jitter=1, retry_exceptions=(Exception,),
+                cleanup=None, args=(), kwargs={}, loop=None):
+        super(Retry, self).__init__()
+        self.action = action
+        self.attempts = attempts
+        self.sleeptime = sleeptime
+        self.max_sleeptime = max_sleeptime
+        self.sleepscale = sleepscale
+        self.jitter = jitter
+        self.retry_exceptions = retry_exceptions
+        self.cleanup = cleanup
+        self.args = args
+        self.kwargs = kwargs
+        self._callbacks.append(self.retry)
 
-        action_name = getattr(action, '__name__', action)
-        if args or kwargs:
+    async def retry(self):
+        assert callable(self.action)
+        assert not self.cleanup or callable(self.cleanup)
+
+        action_name = getattr(self.action, '__name__', self.action)
+        if self.args or self.kwargs:
             log_attempt_format = ("retry: calling %s with args: %s,"
                                   " kwargs: %s, attempt #%%d"
-                                  % (action_name, args, kwargs))
+                                  % (action_name, self.args, self.kwargs))
         else:
             log_attempt_format = ("retry: calling %s, attempt #%%d"
                                   % action_name)
 
-        if max_sleeptime < sleeptime:
+        if self.max_sleeptime < self.sleeptime:
             log.debug("max_sleeptime %d less than sleeptime %d" % (
-                max_sleeptime, sleeptime))
+                self.max_sleeptime, self.sleeptime))
 
         index = 1
-        while index < attempts:
-            log.debug("attempt %i/%i", index, attempts)
+        while index < self.attempts:
+            log.debug("attempt %i/%i", index, self.attempts)
             try:
                 logfn = log.info if index != 1 else log.debug
                 logfn(log_attempt_format, index)
-                self.set_result(action(*args, **kwargs))
+                result = self.action(*args, **kwargs)
+                self.set_result(result)
             except retry_exceptions as exc:
                 log.debug("retry: Caught exception: ", exc_info=True)
                 if cleanup:
                     cleanup()
-                if index >= attempts:
+                if index >= self.attempts:
                     log.info("retry: Giving up on %s" % action_name)
                     self.set_exception(exc)
+                    break
                 length = calculate_sleep_time(
                     index,
-                    sleeptime=sleeptime,
-                    max_sleeptime=max_sleeptime,
-                    sleepscale=sleepscale,
-                    jitter=jitter
+                    sleeptime=self.sleeptime,
+                    max_sleeptime=self.max_sleeptime,
+                    sleepscale=self.sleepscale,
+                    jitter=self.jitter
                 )
                 await asyncio.sleep(length)
             finally:
