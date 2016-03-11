@@ -62,14 +62,13 @@ def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.
     if jitter > sleeptime:
         # To prevent negative sleep times
         raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
+    sleeptime *= sleepscale * attempt
     if jitter:
         sleeptime_real = sleeptime + random.randint(-jitter, jitter)
         # our jitter should scale along with the sleeptime
         jitter = int(jitter * sleepscale)
     else:
         sleeptime_real = sleeptime
-
-    sleeptime_real *= sleepscale
 
     if sleeptime_real > max_sleeptime:
         sleeptime_real = max_sleeptime
@@ -150,12 +149,14 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
 #                     max_sleeptime=max_sleeptime, sleepscale=sleepscale,
 #                     jitter=jitter):
         log.debug("attempt %i/%i", index, attempts)
+        print("attempt %i/%i", index, attempts)
         try:
-            logfn = log.info if n != 1 else log.debug
-            logfn(log_attempt_format, n)
+            logfn = log.info if index != 1 else log.debug
+            logfn(log_attempt_format, index)
             await action(*args, **kwargs)
-        except retry_exceptions:
+        except retry_exceptions as exc:
             log.debug("retry: Caught exception: ", exc_info=True)
+            print("retry: Caught exception: " + str(exc))
             if cleanup:
                 cleanup()
             if index == attempts:
