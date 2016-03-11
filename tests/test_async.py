@@ -4,16 +4,19 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # ***** END LICENSE BLOCK *****
 
+import asyncio
 import mock
 import unittest
 
 from redo import retry, retriable, retrying, retrier
-import asyncio
 
 ATTEMPT_N = 1
 
-async def foo():
-    pass
+def bar():
+    yield "bar"
+
+def foo():
+    yield from bar()
 
 
 def _succeedOnSecondAttempt(foo=None, exception=Exception):
