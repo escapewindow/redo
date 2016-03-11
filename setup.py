@@ -15,4 +15,12 @@ setup(
         "console_scripts": ["retry = redo.cmd:main"],
     },
     url="https://github.com/bhearsum/redo",
+    classifiers=[
+        "Intended Audience :: Developers",
+        "Topic :: Software Development",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: Implementation :: PyPy",
+    ]
 )
