@@ -108,9 +108,11 @@ class TestAsync(unittest.TestCase):
     def testRetryArgsPassed(self):
         args = (1, 'two', 3)
         kwargs = dict(foo='a', bar=7)
-        ret = retry(_mirrorArgs, args=args, kwargs=kwargs.copy(), sleeptime=0, jitter=0)
-        self.assertEqual(ret[0], args)
-        self.assertEqual(ret[1], kwargs)
+        loop = asyncio.get_event_loop()
+        f = asyncio.ensure_future(retry(_mirrorArgs, args=args, kwargs=kwargs.copy(), sleeptime=0, jitter=0))
+        loop.run_until_complete(asyncio.wait([f]))
+        self.assertEqual(f.result()[0], args)
+        self.assertEqual(f.result()[1], kwargs)
 
     def test_sleeptime(self):
         """Make sure retrier sleep is behaving"""
