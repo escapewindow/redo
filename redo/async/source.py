@@ -6,8 +6,6 @@
 from __future__ import absolute_import, division, print_function
 
 import asyncio
-from functools import wraps
-from contextlib import contextmanager
 import logging
 import random
 log = logging.getLogger(__name__)
@@ -37,7 +35,8 @@ def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.
         if jitter > sleeptime:
             # To prevent negative sleep times
             raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
-        jitter = int(jitter * attempt * sleepscale)
+        if attempt > 1:
+            jitter = int(jitter * attempt * sleepscale)
         sleeptime = sleeptime + random.randint(-jitter, jitter)
     else:
         sleeptime = sleeptime
@@ -124,18 +123,13 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
 
     index = 1
     while index < attempts:
-#    for _ in retrier(attempts=attempts, sleeptime=sleeptime,
-#                     max_sleeptime=max_sleeptime, sleepscale=sleepscale,
-#                     jitter=jitter):
         log.debug("attempt %i/%i", index, attempts)
-        #print("attempt %i/%i" % (index, attempts))
         try:
             logfn = log.info if index != 1 else log.debug
             logfn(log_attempt_format, index)
             return action(*args, **kwargs)
-        except retry_exceptions as exc:
+        except retry_exceptions:
             log.debug("retry: Caught exception: ", exc_info=True)
-            #print("retry: Caught exception: " + str(exc))
             if cleanup:
                 cleanup()
             if index == attempts:
@@ -148,76 +142,6 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
                 sleepscale=sleepscale,
                 jitter=jitter
             )
-            #print("retry: sleeping {}...".format(length))
             await asyncio.sleep(length)
         finally:
             index += 1
-
-
-def retriable(*retry_args, **retry_kwargs):
-    """
-    A decorator factory for retry(). Wrap your function in @retriable(...) to
-    give it retry powers!
-
-    Arguments:
-        Same as for `retry`, with the exception of `action`, `args`, and `kwargs`,
-        which are left to the normal function definition.
-
-    Returns:
-        A function decorator
-
-    Example:
-        >>> count = 0
-        >>> @retriable(sleeptime=0, jitter=0)
-        ... def foo():
-        ...     global count
-        ...     count += 1
-        ...     print(count)
-        ...     if count < 3:
-        ...         raise ValueError("count too small")
-        ...     return "success!"
-        >>> for i in foo:
-        ...     print(i)
-        1
-        2
-        3
-        'success!'
-    """
-    def _retriable_factory(func):
-        @wraps(func)
-        def _retriable_wrapper(*args, **kwargs):
-            return retry(func, args=args, kwargs=kwargs, *retry_args,
-                         **retry_kwargs)
-        return _retriable_wrapper
-    return _retriable_factory
-
-
-@contextmanager
-def retrying(func, *retry_args, **retry_kwargs):
-    """
-    A context manager for wrapping functions with retry functionality.
-
-    Arguments:
-        func (callable): the function to wrap
-        other arguments as per `retry`
-
-    Returns:
-        A context manager that returns retriable(func) on __enter__
-
-    Example:
-        >>> count = 0
-        >>> def foo():
-        ...     global count
-        ...     count += 1
-        ...     print(count)
-        ...     if count < 3:
-        ...         raise ValueError("count too small")
-        ...     return "success!"
-        >>> with retrying(foo, sleeptime=0, jitter=0) as f:
-        ...     f()
-        1
-        2
-        3
-        'success!'
-    """
-    yield retriable(*retry_args, **retry_kwargs)(func)
