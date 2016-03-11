@@ -58,22 +58,21 @@ def calculate_sleep_time(attempt, sleeptime=10, max_sleeptime=300, sleepscale=1.
         ...     print("max tries hit")
         max tries hit
     """
-    jitter = jitter or 0
-    if jitter > sleeptime:
-        # To prevent negative sleep times
-        raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
-    sleeptime *= sleepscale * attempt
     if jitter:
-        sleeptime_real = sleeptime + random.randint(-jitter, jitter)
-        # our jitter should scale along with the sleeptime
-        jitter = int(jitter * sleepscale)
+        if jitter > sleeptime:
+            # To prevent negative sleep times
+            raise Exception('jitter ({}) must be less than sleep time ({})'.format(jitter, sleeptime))
+        jitter = int(jitter * attempt * sleepscale)
+        sleeptime = sleeptime + random.randint(-jitter, jitter)
     else:
-        sleeptime_real = sleeptime
+        sleeptime = sleeptime
 
-    if sleeptime_real > max_sleeptime:
-        sleeptime_real = max_sleeptime
+    sleeptime = float(sleeptime * attempt * sleepscale)
 
-    return sleeptime_real
+    if sleeptime > max_sleeptime:
+        sleeptime = max_sleeptime
+
+    return sleeptime
 
 
 async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
@@ -149,11 +148,11 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
 #                     max_sleeptime=max_sleeptime, sleepscale=sleepscale,
 #                     jitter=jitter):
         log.debug("attempt %i/%i", index, attempts)
-        print("attempt %i/%i", index, attempts)
+        print("attempt %i/%i" % (index, attempts))
         try:
             logfn = log.info if index != 1 else log.debug
             logfn(log_attempt_format, index)
-            await action(*args, **kwargs)
+            return action(*args, **kwargs)
         except retry_exceptions as exc:
             log.debug("retry: Caught exception: ", exc_info=True)
             print("retry: Caught exception: " + str(exc))
@@ -162,15 +161,15 @@ async def retry(action, attempts=5, sleeptime=60, max_sleeptime=5 * 60,
             if index == attempts:
                 log.info("retry: Giving up on %s" % action_name)
                 raise
-            await asyncio.sleep(
-                calculate_sleep_time(
-                    index,
-                    sleeptime=sleeptime,
-                    max_sleeptime=max_sleeptime,
-                    sleepscale=sleepscale,
-                    jitter=jitter
-                )
+            length = calculate_sleep_time(
+                index,
+                sleeptime=sleeptime,
+                max_sleeptime=max_sleeptime,
+                sleepscale=sleepscale,
+                jitter=jitter
             )
+            print("retry: sleeping {}...".format(length))
+            await asyncio.sleep(length)
         finally:
             index += 1
 
